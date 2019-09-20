@@ -7,4 +7,11 @@
 #include "gf-student.h"
 #include "gfserver.h"
 
+#include <stdlib.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <regex.h>
+
+//typedef struct gfsrequest_t gfsrequest_t;
+
 #endif // __GF_SERVER_STUDENT_H__

@@ -81,4 +81,61 @@ int main(int argc, char **argv)
     }
 
     /* Socket Code Here */
+    // from /etc/protocols
+    const int IP = 0;
+
+    int sockfd, resp_len;
+    char resp_buffer[BUFSIZE];
+    struct sockaddr_in server_socket;
+    struct hostent *server = gethostbyname(hostname);
+
+    // Allocate socket and assign sockfd
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, IP)) < 0) {
+        perror("Error opening socket\n");
+        exit(1);
+    }
+
+    // Setup the socket to connect to the server
+
+    // not necessary but typically adopted as a convention 
+    // see https://stackoverflow.com/questions/36086642/is-zeroing-out-the-sockaddr-in-structure-necessary
+    bzero((char *) &server_socket, sizeof(server_socket));
+
+    server_socket.sin_family = AF_INET;
+    bcopy((char *)server->h_addr, (char *)&server_socket.sin_addr.s_addr, server->h_length);
+    server_socket.sin_port = htons(portno);
+
+    /* Also not necessary */
+    memset(resp_buffer, 0, BUFSIZE);
+
+    /* Connect to server */
+    if (connect(sockfd, (struct sockaddr*) &server_socket, sizeof(server_socket)) < 0){
+        perror("Error connection");
+        close(sockfd);
+        exit(1);
+    }
+
+    /* Open file */
+    FILE *fp = fopen(filename, "ab");
+    if (NULL == fp) {
+        perror("Error opening file");
+        close(sockfd);
+        exit(1);
+    }
+
+    /* Read from socket until empty */
+    while ((resp_len = read(sockfd, resp_buffer, BUFSIZE)) > 0) {
+        fwrite(resp_buffer, 1, resp_len, fp);
+    }
+
+    /* Handle read failure */
+    if (resp_len < 0) {
+        perror("Error reading from socket");
+        close(sockfd);
+        exit(1);
+    }
+
+    /* Cleanup */
+    close(sockfd);
+    exit(0);
 }

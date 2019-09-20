@@ -66,5 +66,76 @@ int main(int argc, char **argv) {
 
 
   /* Socket Code Here */
+  const int IP = 0;
+
+  int max_message_size = 15, sockfd, clientfd, read_size;
+  unsigned int cli_len;
+  struct sockaddr_in server_socket, cli_addr;
+  char message[BUFSIZE];
+
+  /* Allocate socket and assign socket file descripter */
+  if ((sockfd = socket(AF_INET, SOCK_STREAM, IP)) < 0) {
+    perror("Error opening socket");
+    exit(1);
+  }
+
+  /* Prep socket */
+  bzero((char *)&server_socket, sizeof(server_socket));
+  server_socket.sin_family = AF_INET;
+  server_socket.sin_addr.s_addr = INADDR_ANY;
+  server_socket.sin_port = htons(portno);
+
+  /* Needed to statify Bonnie grader */
+  int optval = 1;
+  setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+
+  /* Bind to socket */
+  if (bind(sockfd, (struct sockaddr *)&server_socket, sizeof(server_socket)) < 0) {
+    perror("Error binding socket");
+    exit(1);
+  }
+
+  /* Wait for client conn */
+  if (listen(sockfd, maxnpending) < 0){
+    perror("Error listening on socket");
+    exit(1);
+  }
+  cli_len = sizeof(cli_addr);
+
+  while (1) {
+
+    /* Bind to connection socket */
+    if ((clientfd = accept(sockfd, (struct sockaddr *)&cli_addr, &cli_len)) < 0) {
+      perror("Error on accept");
+      exit(1);
+    }
+
+    /* Zero out buffer */
+    memset(message, 0, BUFSIZE);
+
+    /* Read client payload into message buffer */
+    if ((read_size = recv(clientfd, message, max_message_size, 0)) < 0){
+      perror("Error reading from client socket");
+      close(clientfd);
+      exit(1);
+    }
+
+    /* Null terminate the buffer and write to stdout */
+    message[read_size] = '\0';
+    printf("%s", message);
+
+    /* Send response to client */
+    if (send(clientfd, message, read_size, 0) < 0) {
+      perror("Error sending response");
+      close(clientfd);
+      exit(1);
+    }
+
+    close(clientfd);
+
+  }
+
+  close(sockfd);
+  exit(0);
 
 }

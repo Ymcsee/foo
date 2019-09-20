@@ -4,6 +4,21 @@
 
 #include "workload.h"
 
+static void Pthread_mutex_lock(pthread_mutex_t *mutex) {
+  int rc = pthread_mutex_lock(mutex);
+  assert(rc == 0);
+}
+
+static void Pthread_mutex_unlock(pthread_mutex_t *mutex) {
+  int rc = pthread_mutex_unlock(mutex);
+  assert(rc == 0);
+}
+
+static void Pthread_cond_signal(pthread_cond_t *cond){
+  int rc = pthread_cond_signal(cond);
+  assert(rc == 0);
+}
+
 //
 //  The purpose of this function is to handle a get request
 //
@@ -14,6 +29,23 @@
 //        not in others.
 //
 gfh_error_t gfs_handler(gfcontext_t **ctx, const char *path, void* arg){
-	return gfh_failure;
+
+	printf("gfs_handler called with path %s\n", path);
+
+	work_arg *warg = (work_arg *) arg;
+
+	queue_item *item = (queue_item*) malloc(sizeof(queue_item));
+	bzero(item->path, sizeof(item->path));
+	strcpy(item->path, path);
+	item->ctx = *ctx;
+	
+	Pthread_mutex_lock(warg->queue_lock);
+	steque_enqueue(warg->work_queue, (steque_item) item);
+	Pthread_cond_signal(warg->cons_cond);
+	Pthread_mutex_unlock(warg->queue_lock);
+
+	*ctx = NULL;
+
+	return gfh_success;
 }
 

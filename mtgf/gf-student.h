@@ -16,5 +16,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/signal.h>
+#include "steque.h"
+#include <pthread.h>
+#include <assert.h>
+
+
+
 
 #endif // __GF_STUDENT_H__

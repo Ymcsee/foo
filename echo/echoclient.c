@@ -82,5 +82,64 @@ int main(int argc, char **argv)
     }
 
     /* Socket Code Here */
+    // from /etc/protcols
+    const int IP = 0;
 
+    int max_message_len = 15, sockfd, resp_len;
+    char resp_buffer[BUFSIZE];
+    struct sockaddr_in server_socket;
+    struct hostent *server = gethostbyname(hostname);
+
+    // Allocate socket and assign sockfd
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, IP)) < 0) {
+        perror("Error opening socket\n");
+        exit(1);
+    }
+
+    // Setup the socket to connect to the server
+
+    // not necessary but typically adopted as a convention 
+    // see https://stackoverflow.com/questions/36086642/is-zeroing-out-the-sockaddr-in-structure-necessary
+    bzero((char *) &server_socket, sizeof(server_socket));
+
+    server_socket.sin_family = AF_INET;
+    bcopy((char *)server->h_addr, (char *)&server_socket.sin_addr.s_addr, server->h_length);
+    server_socket.sin_port = htons(portno);
+
+    /* Also not necessary */
+    memset(resp_buffer, 0, BUFSIZE);
+
+    /* Connect to server */
+    if (connect(sockfd, (struct sockaddr*) &server_socket, sizeof(server_socket)) < 0){
+        perror("Error connection");
+        close(sockfd);
+        exit(1);
+    }
+
+    /* Write to socket */
+    if (send(sockfd, message, strlen(message), 0) < 0) {
+        perror("Error writing to socket");
+        close(sockfd);
+        exit(1);
+    }
+
+    /* Read resp_len */
+    if ((resp_len = recv(sockfd, resp_buffer, max_message_len, 0)) < 0) {
+        perror("Error reading from socket");
+        close(sockfd);
+        exit(1);
+    }
+
+    /* Null terminate and write response to stdout */
+    resp_buffer[resp_len] = '\0';
+    printf("%s", resp_buffer);
+    /*resp_len = write(stdout, resp_buffer, BUFSIZ - 1);
+    if (resp_len < 0) {
+        perror("Error writing to stdout");
+        exit(1);
+    }*/
+
+    /* Clean up */
+    close(sockfd);
+    exit(0);
 }

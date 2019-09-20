@@ -36,3 +36,57 @@ something that is easily actioned.  Examples of this include:
   this confusing" - we want you to tell us what you would have said _instead_.
 
 While we do award extra credit, we do so sparingly.
+
+## 1. Echo Client-Server
+
+This was straightforward enough, although for me it was a first real primer with C
+
+### Design
+
+
+Main challenges were:
+* Understanding that `recv`, `read` and others block unless explicitly configured not
+to. This caused some confusion with programs hanging until I looked at the man page more plosely. Also given that you have to figure out what actually constitutes the end
+of a particular socket write for example. I.e. Client 1 could be sending 15 bytes every minute vs Client 2 which could send all of the 256 bytes it wants to send at once. Thus Client 1 neccesitates, on the the other end, you read from the socket in chunks, terminating upon some pre-agreed upon delimiter like `\0` for example or simply when Client 1 closes the connection. The latter is the semantics
+that held through throughout this project, although there were instances throughout this project where we could not assume the client would close the connection. Thus the server could hang indefinitely. Client 2 works under the same principle.
+You could read the entire payload in 1 fell swoop, but this is probably least correct
+as you assume that the client will send the payload all at once at that it will be
+no larger than whatever buffer you're reading it all into. This got me in `gf_server.c` in part 3 of the assignment since I assumed that since the GETFILE protocol request is so short in simple, it'd be easiest programmatically to just assume the whole thing would be sent at once. Fixing this passed ~6/10 of the then failing test cases
+
+## 2. Transferring a File
+
+## 3. Implementing the Getfile Protocol
+
+## 4. Implementing a Multithreaded Getfile Server
+
+
+## Improvement Suggestions
+
+* I enjoyed this assignment quite a bit. But what almost was not only enough to offset all of that but also make me hate it, was Bonnie and the general testing situation. You _cannot_ make the working `gfserver_main` and `gfclient_download` binaries you distribute (in the interop thread on Piazza) not reproduce the conditions for at least some of the ridiculously finicky test cases for `gfserver` and particularly `gfclient` _and then_ make it so that your only _proper_ test bed is Bonnie itself _and then also_ limit the # of submissions to 10 per day _aaaaand then_ make it so that students have to read gnarled Python trace backs and mangled logs if the failure output was gracious enough to provide them straight out of some terribly inadequate JSON Bonnie output. Seriously tell me what is the purpose of flagellating students in this way? I'm actually interested in hearing an argument/explanation for why this is the way it is, if there even is one. The whole point of this assignment lest we forget is to get comfortable with POSIX threading APIs, socket programming, and general low level programmatic concerns like managing your own memory correctly.
+The most egregious example of this was the client hung issues that came up time and time again for students. While I appreciate the one thread explaining the common causes and why they happen, students like me continued to be befuzzled by whats happening after ostensibly verrifying that none of those common cases were whats happening in their code. So literally what can we do? Create a bunch of our own test cases and see if the issue magically manifests itself. And for me at least nothing came of that. I continued to try to squint at this:
+
+```
+{
+      "output": {
+        "client_returncode": null,
+        "server_console": "",
+        "passfail": "failed",
+        "server_returncode": null,
+        "client_console": ""
+      },
+      "traceback": "Traceback (most recent call last):\n  File \"/home/grader/pr1_gfclient/gios.py\", line 293, in func_wrapper\n    ans = func(self)\n  File \"run.py\", line 39, in test_ok_with_short_message\n    ['./bvtgfclient_main', '-p', self.port], client_preload_log='gios_test1.dat')\n  File \"/home/grader/pr1_gfclient/gios.py\", line 231, in converse\n    self.assertIsNotNone(self.p_client.poll(), \"The client is taking too long (probably hung).\")\nAssertionError: The client is taking too long (probably hung).\n",
+      "description": "Tests that the client properly handles an OK response and a short message (less than 1000 bytes)"
+    },
+    {
+      "output": {
+        "client_returncode": null,
+        "server_console": "",
+        "passfail": "failed",
+        "server_returncode": null,
+        "client_console": ""
+      },
+      "traceback": "Traceback (most recent call last):\n  File \"/home/grader/pr1_gfclient/gios.py\", line 293, in func_wrapper\n    ans = func(self)\n  File \"run.py\", line 211, in test_special_file_content\n    ['./bvtgfclient_main', '-p', self.port, '-c', '1'])\n  File \"/home/grader/pr1_gfclient/gios.py\", line 231, in converse\n    self.assertIsNotNone(self.p_client.poll(), \"The client is taking too long (probably hung).\")\nAssertionError: The client is taking too long (probably hung).\n",
+      "description": "Tests to ensure client can properly handle a file with control data"
+    },
+    ```
+and figure out what in the hell this means. Which what really put the cherry on top of the frustration, is the fact that I'm a software engineer by profession and it would just simply never be the case, ever, conceivably, that this would be the only thing I'd have to go off of when tracking down a bug, for example. So what is my suggestion? Simply provide the test binary that logs sufficiently noisely to where you're not making it obvious but you're also not ^ not outputting logs when certain failures occur vs others, to us as a file in each folder of this project. We can test against it as much as we want and when we're done we simply submit a zip of our project or we submit to Bonnie which doesnt run anymore tests or what have you

@@ -68,6 +68,14 @@ steque_item steque_pop(steque_t* this){
   return ans;
 }
 
+/*
+f         b
+1 -> 2 -> 3
+
+f         b
+2 -> 3 -> 1
+*/
+
 void steque_cycle(steque_t* this){
   if(this->back == NULL)
     return;

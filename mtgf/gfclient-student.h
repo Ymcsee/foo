@@ -7,5 +7,7 @@
 #include "workload.h"
 #include "gfclient.h"
 #include "gf-student.h"
+
+typedef struct work_arg work_arg;
  
  #endif // __GF_CLIENT_STUDENT_H__

@@ -8,6 +8,18 @@
 #include "gfserver.h"
 #include "content.h"
 
+typedef struct work_arg {
+  steque_t *work_queue;
+  pthread_mutex_t *queue_lock;
+  pthread_cond_t *cons_cond;
+  pthread_cond_t *main_cond;
+  unsigned short port;
+} work_arg ;
+
+typedef struct queue_item {
+  char path[256];
+  gfcontext_t *ctx;
+} queue_item;
 
 void init_threads(size_t numthreads);
 void cleanup_threads();
