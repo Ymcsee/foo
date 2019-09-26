@@ -75,10 +75,18 @@ int main(int argc, char **argv)
     unsigned int cli_len;
     struct sockaddr_in server_socket, cli_addr;
     char resp_buffer[BUFSIZE];
+    FILE *fp;
+
+    /* Open file */
+    if ((fp = fopen(filename, "rb")) == NULL) {
+        perror("Error opening file");
+        exit(1);
+    }
 
     /* Allocate socket and assign socket file descripter */
     if ((sockfd = socket(AF_INET, SOCK_STREAM, IP)) < 0) {
         perror("Error opening socket");
+        fclose(fp);
         exit(1);
     }
 
@@ -95,6 +103,7 @@ int main(int argc, char **argv)
     /* Bind to socket */
     if (bind(sockfd, (struct sockaddr *)&server_socket, sizeof(server_socket)) < 0) {
         perror("Error binding socket");
+        fclose(fp);
         exit(1);
     }
 
@@ -106,33 +115,28 @@ int main(int argc, char **argv)
         /* Bind to connection socket */
         if ((clientfd = accept(sockfd, (struct sockaddr *)&cli_addr, &cli_len)) < 0) {
             perror("Error on accept");
+            fclose(fp);
             exit(1);
         }
 
-        /* Zero out buffer */
-        //memset(resp_buffer, 0, BUFSIZE);
-
-        /* Open file */
-        FILE *fp = fopen(filename, "rb");
-        if (NULL == fp) {
-            perror("Error opening file");
-            close(clientfd);
-            exit(1);
-        }
-
+        /* Read into response buffer and send in chunks */
         while ((read_size = fread(resp_buffer, 1, BUFSIZE, fp)) > 0) {
             if (send(clientfd, resp_buffer, read_size, 0) < 0) {
                 perror("Error sending response");
+                fclose(fp);
                 close(clientfd);
                 exit(1);
             }
             memset(resp_buffer, 0, BUFSIZE);
         }
 
+        /* Close connection */
         close(clientfd);
     }
 
+    /* Cleanup */
     close(sockfd);
+    fclose(fp);
     exit(0);
 
 }

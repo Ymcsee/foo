@@ -35,13 +35,16 @@ gfh_error_t gfs_handler(gfcontext_t **ctx, const char *path, void* arg){
 	work_arg *warg = (work_arg *) arg;
 
 	queue_item *item = (queue_item*) malloc(sizeof(queue_item));
-	bzero(item->path, sizeof(item->path));
+	/* Set item path and context */
+	memset(item->path, 0, 500);
 	strcpy(item->path, path);
 	item->ctx = *ctx;
 	
+	/* Aquire queue lock and enqueue work item */
 	Pthread_mutex_lock(warg->queue_lock);
 	steque_enqueue(warg->work_queue, (steque_item) item);
 	Pthread_cond_signal(warg->cons_cond);
+	/* Signal to handler threads */
 	Pthread_mutex_unlock(warg->queue_lock);
 
 	*ctx = NULL;

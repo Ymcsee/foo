@@ -116,8 +116,8 @@ int main(int argc, char **argv)
     }
 
     /* Open file */
-    FILE *fp = fopen(filename, "ab");
-    if (NULL == fp) {
+    FILE *fd = fopen(filename, "ab");
+    if (NULL == fd) {
         perror("Error opening file");
         close(sockfd);
         exit(1);
@@ -125,17 +125,19 @@ int main(int argc, char **argv)
 
     /* Read from socket until empty */
     while ((resp_len = read(sockfd, resp_buffer, BUFSIZE)) > 0) {
-        fwrite(resp_buffer, 1, resp_len, fp);
+        fwrite(resp_buffer, 1, resp_len, fd);
     }
 
     /* Handle read failure */
     if (resp_len < 0) {
         perror("Error reading from socket");
         close(sockfd);
+        fclose(fd);
         exit(1);
     }
 
     /* Cleanup */
     close(sockfd);
+    fclose(fd);
     exit(0);
 }

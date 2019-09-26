@@ -56,8 +56,7 @@ static void* work(void *arg) {
   
   while (1) {
 
-    memset(resp_buffer, 0, BUFSIZE);
-
+    /* Wait until work exists + signal */
     Pthread_mutex_lock(warg->queue_lock);
     while (steque_isempty(warg->work_queue)) {
       Pthread_cond_wait(warg->cons_cond, warg->queue_lock);
@@ -65,84 +64,48 @@ static void* work(void *arg) {
     item = (queue_item *) steque_pop(warg->work_queue);
     Pthread_mutex_unlock(warg->queue_lock);
 
-    if (item == NULL) {
-      continue;
-    }
-
     ctx = item->ctx;
 
+    /* Initialize file descriptor */
     if ((fd = content_get(item->path)) < 0) {
       gfs_sendheader(&ctx, GF_FILE_NOT_FOUND, 0);
-      //gfs_abort(item->ctx);
       continue;
     }
 
+    /* Set file status */
     if ((fstatus = fstat(fd, &fs)) < 0) {
-      // what do we do
       gfs_sendheader(&ctx, GF_ERROR, 0);
-      //gfs_abort(item->ctx);
       close(fd);
       continue;
     }
 
     pthread_t t = pthread_self();
-
     printf("Size of file: %ld with path %s from thread %lu\n", fs.st_size, item->path, t);
 
-    // TODO: can we cast `off_t` to `size_t` ?
+    /* Send header */
     gfs_sendheader(&ctx, GF_OK, fs.st_size);
 
+    /* Ensure zerod-out */
     memset(resp_buffer, 0, BUFSIZE);
 
-    /*int bytes_sent = 0;
-    int write_size = 0;
-    while (bytes_sent < fs.st_size) {
-      if ((read_size = pread(fd, resp_buffer, BUFSIZE, bytes_sent)) <= 0) {
-          perror("Error reading from file");
-          //gfs_abort(item->ctx);
-          //close(fd);
-          break;
-      }
-      if ((write_size = gfs_send(item->ctx, resp_buffer, read_size)) < 0) {
-          perror("Error sending response");
-          //gfs_abort(item->ctx);
-          //close(fd);
-          break;
-      }
-      bytes_sent += write_size;
+    int bytes_read = 0;
+	  int bytes_sent = 0;
+    int bytes_sent_curr;
+    while ((bytes_read = pread(fd, resp_buffer, BUFSIZE, bytes_sent)) > 0) {
+      /* Send bytes and add to total */
+      bytes_sent_curr = gfs_send(&ctx, resp_buffer, bytes_read);
+      bytes_sent += bytes_sent_curr;
+
       printf("Read %d bytes and wrote %d bytes to client. Total sent: %d with path %s of size %ld from thread %lu\n", 
-        read_size, write_size, bytes_sent, item->path, fs.st_size, t);
+        bytes_read, bytes_sent_curr, bytes_sent, item->path, fs.st_size, t);
+
+      /* Zero out */
       memset(resp_buffer, 0, BUFSIZE);
-    }*/
-    //int bytes_sent = 0;
-    int nRead = 0;
-	  int nTotalSent = 0;
-    while ((nRead = pread(fd, resp_buffer, BUFSIZE, nTotalSent)) > 0)
-    {
-      int nRemaining = 0, nSent = 0;
-      nRemaining = nRead;
-
-      nSent = gfs_send(&ctx, resp_buffer, nRemaining);
-
-      nTotalSent += nSent;
-
-      printf("Read %d bytes and wrote %d bytes to client. Total sent: %d with path %s of size %ld from thread %lu\n", 
-        nRead, nSent, nTotalSent, item->path, fs.st_size, t);
-
-      bzero(resp_buffer, sizeof(resp_buffer));
     }
 
     printf("Ended up sending %d bytes to client with path %s of size %ld from thread %lu\n", 
-       nTotalSent, item->path, fs.st_size, t);
-    //
-    /*if(strlen(req_path) > 500){
-      fprintf(stderr, "Request path exceeded maximum of 500 characters\n.");
-      exit(EXIT_FAILURE);
-    }*/
-    //close(fd);
-    //gfs_abort(item->ctx);
-    //free(*(item->ctx));
-    //*(item->ctx) = NULL;
+       bytes_sent, item->path, fs.st_size, t);
+
     free(item);
   }
 

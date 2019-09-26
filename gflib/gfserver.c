@@ -9,13 +9,6 @@
 const char *response_end = "\r\n\r\n";
 const char *header_template = "GETFILE %s %zu\r\n\r\n";
 
-/*struct gfsrequest_t {
-    bool is_valid_request;
-    char *scheme;
-    char *method;
-    char *path;
-};*/
-
 struct gfserver_t {
     int sockfd;
     unsigned short port;
@@ -28,13 +21,12 @@ struct gfcontext_t {
     int clientfd;
     struct sockaddr_in *client_addr;
     char *path;
-    //struct request_t *request;
 };
 
 void gfs_abort(gfcontext_t **ctx){
     close((*ctx)->clientfd);
     free(*ctx);
-    //free(ctx);
+    *ctx = NULL;
 }
 
 gfserver_t* gfserver_create(){
@@ -59,6 +51,9 @@ gfserver_t* gfserver_create(){
 ssize_t gfs_send(gfcontext_t **ctx, const void *data, size_t len){
     return send((*ctx)->clientfd, data, len, 0);
 }
+
+/*bzero(item->path, sizeof(item->path));
+	strcpy(item->path, path);*/
 
 ssize_t gfs_sendheader(gfcontext_t **ctx, gfstatus_t status, size_t file_len){
     char header[BUFSIZ];
@@ -86,6 +81,7 @@ ssize_t gfs_sendheader(gfcontext_t **ctx, gfstatus_t status, size_t file_len){
         break;
     }
 
+    /* Only care about sending length if status is ok */
     if (status == GF_OK) {
         sprintf(header, "GETFILE %s %zu \r\n\r\n", strstatus , file_len);
     } else {
@@ -95,9 +91,10 @@ ssize_t gfs_sendheader(gfcontext_t **ctx, gfstatus_t status, size_t file_len){
     return send((*ctx)->clientfd, header, strlen(header), 0);
 }
 
+/* Regex to parse request path into ctx */
 static int parse_request(gfcontext_t *ctx, char *req_buffer) {
 
-    char *req_regex = "^GETFILE GET ([./a-zA-Z0-9-].*)[ ]{0,1}\r\n\r\n$";
+    char *req_regex = "^GETFILE GET (/[./a-zA-Z0-9-].*)[ ]{0,1}\r\n\r\n$";
 
     regex_t resp_regex_compiled;
     int groups_num = 2;
@@ -200,6 +197,7 @@ void gfserver_serve(gfserver_t **gfs){
             }
             strcpy(req_buffer + bytes_received, buffer);
             bytes_received += req_size;
+            memset(buffer, 0, MAX_REQUEST_LEN);
         }
 
         /* Parse request into request buffer and if it fails, write

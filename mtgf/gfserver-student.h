@@ -17,7 +17,7 @@ typedef struct work_arg {
 } work_arg ;
 
 typedef struct queue_item {
-  char path[256];
+  char path[500];
   gfcontext_t *ctx;
 } queue_item;
 

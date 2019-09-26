@@ -7,5 +7,6 @@
  #include "gfclient.h"
  #include "gf-student.h"
  #include <regex.h>
+ #include <stdbool.h>
  
  #endif // __GF_CLIENT_STUDENT_H__

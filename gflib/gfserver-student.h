@@ -12,6 +12,4 @@
 #include <stdbool.h>
 #include <regex.h>
 
-//typedef struct gfsrequest_t gfsrequest_t;
-
 #endif // __GF_SERVER_STUDENT_H__

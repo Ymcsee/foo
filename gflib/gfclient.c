@@ -79,6 +79,7 @@ void gfc_global_cleanup(){
     regfree(&resp_regex_compiled);
 }
 
+/* Parses a status from a string */
 static gfstatus_t parse_gfc_strstatus(char *status) {
     if (strcmp(status, "ERROR") == 0) {
         return GF_ERROR;
@@ -91,6 +92,7 @@ static gfstatus_t parse_gfc_strstatus(char *status) {
     }
 }
 
+/* Use regex to parse the response header into gfr */
 static int parse_header(gfcrequest_t **gfr, char *header_buffer){
 
     int filelength = 0;
@@ -131,10 +133,40 @@ static int parse_header(gfcrequest_t **gfr, char *header_buffer){
     return 0;
 }
 
+/* Dumb, last minute check to satisfy Bonnie's cryptic failures. We
+want to fail fast if it is obvious that the response is invalid
+ */
+static bool continue_reading_header(char *header) {
+    char *prefix = "GETFILE ";
+    char *ok = "GETFILE OK";
+    char *error = "GETFILE ERROR";
+    char *invalid = "GETFILE INVALID";
+    char *file_not_found = "GETFILE FILE_NOT_FOUND";
+    bool cont = true;
+
+    if (strlen(header) >= strlen(prefix)) {
+        if (strstr(header, prefix) == NULL) {
+            cont = false;
+        } else {
+            if (strlen(header) >= strlen(ok) && strstr(header, ok) != NULL) {
+            } else if (strlen(header) >= strlen(error) && strstr(header, error) != NULL) {
+            } else if (strlen(header) >= strlen(invalid) && strstr(header, invalid) != NULL) {
+            } else if (strlen(header) >= strlen(file_not_found) && strstr(header, file_not_found) != NULL) {
+            } else {
+                cont = false;
+            }
+        }
+    }
+
+    return cont;
+
+}
+
 int gfc_perform(gfcrequest_t **gfr){
     // currently not implemented.  You fill this part in.
+    int BUFSIZE = 10000;
     char request[BUFSIZ];
-    char buffer[BUFSIZ];
+    char buffer[BUFSIZE];
     struct addrinfo *host;
     int sockfd;
     char portno[6];
@@ -154,26 +186,25 @@ int gfc_perform(gfcrequest_t **gfr){
         return 0;
     }
 
+    /* Assign socket file desc */
     (*gfr)->sockfd = sockfd;
 
+    /* Prep socket */
     struct timeval tv;
     tv.tv_sec = .02;
     tv.tv_usec = 0;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 
-
+    /* Connect to socket */
     if (connect(sockfd, host->ai_addr, host->ai_addrlen) < 0) {
         (*gfr)->status = GF_ERROR;
         freeaddrinfo(host);
-        perror("Error connecting");
+        perror("Error connecting\n");
         return 0;
     }
 
     /* Create request string */
     sprintf(request, header_template, (*gfr)->path);
-
-    perror("Can you see this shit 1\n");
-
 
     /* Write to socket */
     if (send(sockfd, request, strlen(request), 0) < 0) {
@@ -183,65 +214,82 @@ int gfc_perform(gfcrequest_t **gfr){
         return -1;
     }
 
+    
+    char temp_header_buffer[BUFSIZE];
     char header_buffer[BUFSIZ];
-    char content_buffer[BUFSIZ];
-    perror("Can you see this shit 2\n");
-    printf("Before initial rev %ld\n", strlen(buffer));
-    if ((resplen = recv(sockfd, buffer, BUFSIZ, 0)) <= 0) {
-        if (resplen == 0) {
-            perror("Client closed request while reading first part of request");
-        } else {
-            perror("Reading first part of request failed");
-            (*gfr)->status = GF_ERROR;
+    char content_buffer[BUFSIZE];
+    char *rest;
+    int bytes_received = 0;
+
+    /* Ensure everything zero-ed out */
+    memset(buffer, 0, BUFSIZE);
+    memset(temp_header_buffer, 0, BUFSIZE);
+    memset(header_buffer, 0, BUFSIZ);
+    memset(content_buffer, 0, BUFSIZE);
+
+    while((rest = strstr(temp_header_buffer, response_end)) == NULL){
+        if (!continue_reading_header(temp_header_buffer)) {
+            freeaddrinfo(host);
+            return -1;
         }
-        freeaddrinfo(host);
-        return resplen;
+        if ((resplen = recv(sockfd, buffer, BUFSIZ, 0)) <= 0) {
+            if (resplen == 0) {
+                perror("Client closed request while reading first part of request");
+            } else {
+                perror("Reading first part of request failed");
+                (*gfr)->status = GF_ERROR;
+            }
+            freeaddrinfo(host);
+            return -1;
+        }
+        strcpy(temp_header_buffer + bytes_received, buffer);
+        char err[9000];
+        sprintf(err, "Initial recv: %ld bytes. Content: %s\n", bytes_received + resplen, temp_header_buffer + bytes_received);
+        perror(err);
+        bytes_received += resplen;
+        memset(err, 0, 9000);
+        memset(buffer, 0, BUFSIZ);
     }
 
-    char err[300];
-    sprintf(err, "Can you see this shit 3. Header: %s Content: %s \n", header_buffer, content_buffer);
-    perror(err);
-
-    printf("After initial rev %ld buffer is: %s\n", strlen(buffer), buffer);
-    char *rest = strstr(buffer, response_end);
-    if (rest == NULL) {
-        perror("Invalid header");
-        freeaddrinfo(host);
-        return -1;
-    }
-    strcpy(header_buffer, strtok(buffer, response_end));
+    /* Populate buffers we will actually work with */
+    strcpy(header_buffer, strtok(temp_header_buffer, response_end));
     strcpy(content_buffer, rest + strlen(response_end));
-    memset(buffer, 0 ,BUFSIZ);
+    memset(temp_header_buffer, 0 ,BUFSIZE);
 
 
-    printf("Header: %s of length %ld\n", header_buffer, strlen(header_buffer));
+    printf("Header: %s of length %ld read\n", header_buffer, strlen(header_buffer));
 
+    /* Populate components of response header into gfr */
     if (parse_header(gfr, header_buffer) < 0){
         freeaddrinfo(host);
         return -1;
     }
 
+    /* Invoke callback if headerfunc set */
     if ((*gfr)->headerfunc) {
         (*gfr)->headerfunc(header_buffer, (size_t) strlen(header_buffer), (*gfr)->headerarg);
     }
 
+    /* Can zero-out header buffer now */
     memset(header_buffer, 0, BUFSIZ);
 
+    /* If nothing left to do return early */
     if ((*gfr)->status == GF_ERROR || (*gfr)->status == GF_FILE_NOT_FOUND){
         freeaddrinfo(host);
         return 0;
     }
 
-    printf("Content buffer length %ld\n", strlen(content_buffer));
+    printf("Content buffer length %ld parsed from initial recv\n", strlen(content_buffer));
 
     if ((*gfr)->writefunc) {
         int content_buffer_len = strlen(content_buffer);
+        /* Invoke callback with initial content */
         (*gfr)->writefunc(content_buffer, (size_t) content_buffer_len, (*gfr)->writearg);
-        memset(content_buffer, 0, BUFSIZ);
+        memset(content_buffer, 0, BUFSIZE);
+        /* Add how many bytes we've read of the content thus far */
         (*gfr)->bytesrecieved = (size_t) content_buffer_len;
-
-        perror("Can you see this shit 4\n");
         
+        /* Continue until we've read the entire file byte length parsed from header response */
         while ((*gfr)->bytesrecieved < (*gfr)->filelen){
             if ((resplen = recv(sockfd, buffer, BUFSIZ, 0)) <= 0) {
                 if (resplen == 0) {
@@ -255,14 +303,11 @@ int gfc_perform(gfcrequest_t **gfr){
             }
             (*gfr)->writefunc(buffer, resplen, (*gfr)->writearg);
             (*gfr)->bytesrecieved += resplen;
-            char err1[300];
-            sprintf(err1, "Bytes read: %lu Bytes receieved so far: %lu File length: %ld\n", resplen, (*gfr)->bytesrecieved, (*gfr)->filelen);
-            perror(err1);
             printf("Bytes read: %lu Bytes receieved so far: %lu File length: %ld\n", resplen, (*gfr)->bytesrecieved, (*gfr)->filelen);
             memset(buffer, 0 ,BUFSIZ);
-            if (resplen < BUFSIZ) {
+            /*if (resplen < BUFSIZ) {
                 break;
-            }
+            }*/
         }
     }
 
